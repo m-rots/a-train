@@ -1,0 +1,22 @@
+# General
+*.env
+.mypy_cache
+.DS_Store
+.vscode
+
+# Rust-specific
+/target
+
+# Project-specific
+*.json
+*.toml
+!/.cargo/**
+!Cargo.toml
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# Keys
+*.pem

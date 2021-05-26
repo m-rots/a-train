@@ -1,0 +1,7 @@
+# Ignore everything
+**
+
+# Allow target/dist
+!/target/dist/**
+# Allow scripts
+!/scripts/**
