@@ -104,5 +104,9 @@ jobs:
           name: arm-unknown-linux-musleabihf
           path: target/dist
 
+      - name: Display structure of downloaded files
+        run: ls -R
+        working-directory: target/dist
+
       - name: Build and push
         run: cargo xtask docker build --push
