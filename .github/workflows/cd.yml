@@ -38,18 +38,14 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v2
 
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          target: ${{ matrix.target }}
-          toolchain: stable
-          override: true
-
       # With each cache weighing in at ~500MB per target,
       # and this repository maxing out at 5GB of caches,
       # it might make sense not to cache dependencies.
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v1
+
+      - name: Install Rust Cross
+        run: cargo install cross
 
       - name: Run dist
         run: cargo xtask dist ${{ matrix.target }}
