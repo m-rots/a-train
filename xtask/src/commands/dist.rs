@@ -15,13 +15,13 @@ pub(crate) struct Dist {
 }
 
 impl Dist {
-    pub(crate) fn new<I, T>(targets: I) -> Self
+    pub(crate) fn new<I, T>(targets: I, skip_build: bool) -> Self
     where
         I: IntoIterator<Item = T>,
         T: Into<String>,
     {
         Self {
-            skip_build: false,
+            skip_build,
             targets: targets.into_iter().map(Into::into).collect(),
         }
     }

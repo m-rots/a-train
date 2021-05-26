@@ -1,4 +1,4 @@
-FROM python:3.9-slim as build
+FROM --platform=${BUILDPLATFORM} python:3.9-slim as build
 WORKDIR /dist
 ARG TARGETPLATFORM
 # Deps

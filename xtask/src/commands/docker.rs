@@ -70,16 +70,22 @@ impl XtaskCommand for Build {
 }
 
 #[derive(Clap)]
-struct Prepare;
+struct Prepare {
+    #[clap(long)]
+    skip_build: bool,
+}
 
 impl XtaskCommand for Prepare {
     fn run(&self) -> anyhow::Result<()> {
-        let dist = super::dist::Dist::new(vec![
-            "x86_64-unknown-linux-musl",
-            "aarch64-unknown-linux-musl",
-            "arm-unknown-linux-musleabihf",
-            "armv7-unknown-linux-musleabihf",
-        ]);
+        let dist = super::dist::Dist::new(
+            vec![
+                "x86_64-unknown-linux-musl",
+                "aarch64-unknown-linux-musl",
+                "arm-unknown-linux-musleabihf",
+                "armv7-unknown-linux-musleabihf",
+            ],
+            self.skip_build,
+        );
 
         dist.run()
     }
