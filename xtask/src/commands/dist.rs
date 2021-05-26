@@ -64,7 +64,11 @@ fn package(target: &str) -> anyhow::Result<()> {
     let _s = Section::new(format!("Package: {}", target));
 
     let src = source_path(&target);
-    strip(&src)?;
+
+    // Ignore the error strip provides on cross-compiled binaries.
+    // Should probably wait for Rust to provide stripping of its own
+    // without requiring nightly.
+    strip(&src).ok();
 
     let dst = destination_path(&target);
     gzip(&src, &dst)?;
