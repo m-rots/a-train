@@ -1,18 +1,18 @@
 use crate::commands::XtaskCommand;
-use clap::{AppSettings, Clap};
+use clap::{AppSettings, Parser};
 use commands::{Ci, Dist, Docker};
 
 mod commands;
 
-#[derive(Clap)]
-#[clap(setting = AppSettings::VersionlessSubcommands)]
+#[derive(Parser)]
+#[clap(setting = AppSettings::PropagateVersion)]
 enum SubCommand {
     Ci(Ci),
     Dist(Dist),
     Docker(Docker),
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct Opt {
     #[clap(subcommand)]
     cmd: SubCommand,

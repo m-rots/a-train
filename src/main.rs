@@ -1,6 +1,5 @@
 use a_train::Config;
-use anyhow::anyhow;
-use clap::Clap;
+use clap::Parser;
 use std::env;
 use tokio::signal::ctrl_c;
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -13,7 +12,7 @@ use tracing_subscriber::fmt::format::FmtSpan;
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 /// Google Drive support for Autoscan.
-#[derive(Clap)]
+#[derive(Parser)]
 #[clap(name = "A-Train", version = version())]
 struct Opt {
     /// Path to the configuration file
@@ -34,16 +33,10 @@ fn version() -> &'static str {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> eyre::Result<()> {
+    color_eyre::install()?;
+
     let opt = Opt::parse();
-
-    let build_time = env!("VERGEN_BUILD_TIMESTAMP");
-    let build_time = chrono::DateTime::parse_from_rfc3339(build_time)
-        .map_err(|_| anyhow!("Whoops! This build is no longer valid."))?;
-
-    if chrono::Utc::now() > build_time + chrono::Duration::weeks(4) {
-        return Err(anyhow!("Whoops! This build is no longer valid."));
-    }
 
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -60,7 +53,7 @@ async fn main() -> anyhow::Result<()> {
         a_train = a_train.proxy(url);
     }
 
-    let a_train = a_train.build().await;
+    let a_train = a_train.build().await?;
 
     loop {
         tokio::select! {

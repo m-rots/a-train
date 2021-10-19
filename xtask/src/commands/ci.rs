@@ -1,8 +1,8 @@
 use crate::commands::{Section, XtaskCommand};
-use clap::Clap;
+use clap::Parser;
 use xshell::cmd;
 
-#[derive(Clap)]
+#[derive(Parser)]
 pub(crate) struct Ci;
 
 fn cargo_clippy() -> xshell::Result<()> {

@@ -17,6 +17,8 @@ Shared Drives can only be created on GSuite / Google Workspace accounts.
 First, you must [create a Service Account](https://cloud.google.com/iam/docs/creating-managing-service-accounts#iam-service-accounts-create-console) and [create a JSON key](https://cloud.google.com/iam/docs/creating-managing-service-account-keys#creating_service_account_keys).
 Afterwards, if you do not have one already, [create a Shared Drive within Google Drive](https://support.google.com/a/users/answer/9310249) and then add the email address of the Service Account to the Shared Drive (with `Reader` permission).
 
+Finally, activate the Drive API in the Google Cloud Project where you created the Service Account.
+
 ## Installation
 
 A-Train has multiple installation options:

@@ -1,8 +1,7 @@
 use autoscan::{Autoscan, AutoscanBuilder};
 use bernard::{Bernard, BernardBuilder};
 use reqwest::IntoUrl;
-use snafu::Snafu;
-use std::path::PathBuf;
+use thiserror::Error;
 
 mod autoscan;
 mod config;
@@ -10,30 +9,16 @@ mod drive;
 
 pub use config::Config;
 
-#[derive(Debug, Snafu)]
+#[derive(Debug, Error)]
 pub enum Error {
-    #[snafu(display("Autoscan is unavailable"))]
-    AutoscanUnavailable { source: reqwest::Error },
-    #[snafu(display("Bernard gave up?"))]
-    BernardError { source: bernard::Error },
-    #[snafu(display("Could not parse the configuration file from {:?}", path))]
-    InvalidConfiguration {
-        source: toml::de::Error,
-        path: PathBuf,
-    },
-    #[snafu(display("Invalid service account key file"))]
-    InvalidServiceAccount { source: bernard::Error },
-    #[snafu(display("Unable to read configuration file from {:?}", path))]
-    ReadConfiguration {
-        source: std::io::Error,
-        path: PathBuf,
-    },
-}
-
-impl From<bernard::Error> for Error {
-    fn from(source: bernard::Error) -> Self {
-        Self::BernardError { source }
-    }
+    #[error("Autoscan is unavailable")]
+    AutoscanUnavailable(#[from] autoscan::AutoscanError),
+    #[error("Bernard")]
+    Bernard(#[from] bernard::Error),
+    #[error(transparent)]
+    Unexpected(#[from] eyre::Report),
+    #[error("Invalid configuration")]
+    Configuration(#[from] config::ConfigError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -77,11 +62,15 @@ impl AtrainBuilder {
         self
     }
 
-    pub async fn build(self) -> Atrain {
-        Atrain {
+    pub async fn build(self) -> Result<Atrain> {
+        let a_train = Atrain {
             autoscan: self.autoscan.build(),
             bernard: self.bernard.build().await.unwrap(),
             drives: self.drives,
-        }
+        };
+
+        // Check whether Autoscan is available.
+        a_train.autoscan.available().await?;
+        Ok(a_train)
     }
 }

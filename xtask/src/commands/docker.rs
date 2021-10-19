@@ -1,10 +1,10 @@
 use crate::commands::XtaskCommand;
 use anyhow::ensure;
-use clap::Clap;
+use clap::Parser;
 use std::process::Command;
 
 /// Build the Docker image
-#[derive(Clap)]
+#[derive(Parser)]
 pub(crate) struct Docker {
     #[clap(subcommand)]
     cmd: SubCommand,
@@ -19,7 +19,7 @@ impl XtaskCommand for Docker {
     }
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 enum SubCommand {
     /// Build the Docker image.
     ///
@@ -33,7 +33,7 @@ enum SubCommand {
     Prepare(Prepare),
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct Build {
     /// Push the Docker image to the remote registry.
     #[clap(long)]
@@ -69,7 +69,7 @@ impl XtaskCommand for Build {
     }
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct Prepare {
     #[clap(long)]
     skip_build: bool,

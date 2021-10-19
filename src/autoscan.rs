@@ -1,19 +1,85 @@
+use async_trait::async_trait;
 use bernard::{ChangedPath, Path};
-use reqwest::{Client, ClientBuilder, IntoUrl, Url};
+use eyre::eyre;
+use reqwest::{Client, ClientBuilder, IntoUrl, Request, Response, Url};
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
 use std::{collections::HashSet, path::PathBuf};
+use thiserror::Error;
+use tower::{buffer::Buffer, util::BoxService, BoxError, Service as _, ServiceBuilder, ServiceExt};
 use tracing::debug;
 
-pub(crate) struct Autoscan {
+type Service = Buffer<BoxService<Request, Response, reqwest::Error>, Request>;
+
+#[derive(Debug, Error)]
+pub enum AutoscanError {
+    #[error("network error")]
+    Network(#[from] eyre::Report),
+}
+
+impl From<BoxError> for AutoscanError {
+    fn from(err: BoxError) -> Self {
+        Self::Network(eyre!(err))
+    }
+}
+
+impl From<reqwest::Error> for AutoscanError {
+    fn from(err: reqwest::Error) -> Self {
+        Self::Network(err.into())
+    }
+}
+
+#[async_trait]
+trait RequestExt {
+    async fn svc_send<T: AsRef<Service> + Send>(
+        self,
+        service: T,
+    ) -> Result<Response, AutoscanError>;
+}
+
+#[async_trait]
+impl RequestExt for reqwest::RequestBuilder {
+    async fn svc_send<T: AsRef<Service> + Send>(
+        self,
+        service: T,
+    ) -> Result<Response, AutoscanError> {
+        let mut service = service.as_ref().clone();
+
+        let request = self.build()?;
+        let response = service.ready().await?.call(request).await?;
+
+        Ok(response)
+    }
+}
+
+pub struct Autoscan {
     auth: Option<Credentials>,
     client: Client,
+    service: Service,
     url: Url,
+}
+
+impl AsRef<Service> for Autoscan {
+    fn as_ref(&self) -> &Service {
+        &self.service
+    }
 }
 
 impl Autoscan {
     pub(crate) fn new(auth: Option<Credentials>, client: Client, url: Url) -> Self {
-        Self { auth, client, url }
+        let service = {
+            let client = client.clone();
+            let service =
+                ServiceBuilder::new().service_fn(move |request: Request| client.execute(request));
+
+            Buffer::new(BoxService::new(service), 1024)
+        };
+
+        Self {
+            auth,
+            client,
+            service,
+            url,
+        }
     }
 
     pub(crate) fn builder<U: IntoUrl>(url: U, auth: Option<Credentials>) -> AutoscanBuilder {
@@ -86,17 +152,25 @@ pub(crate) fn create_payload(changed_paths: Vec<ChangedPath>) -> Payload {
                     payload.created.insert(folder.path);
                 }
             },
-            ChangedPath::Deleted(path) => match path {
-                Path::File(mut file) => {
-                    // We're only interested in folders.
-                    // Thus we pop the file and retrieve the parent instead.
-                    file.path.pop();
-                    payload.deleted.insert(file.path);
+            ChangedPath::Deleted(path) => {
+                // Do not send this path to Autoscan
+                // if the trash of a Drive is deleted permanently.
+                if path.trashed() {
+                    continue;
                 }
-                Path::Folder(folder) => {
-                    payload.deleted.insert(folder.path);
+
+                match path {
+                    Path::File(mut file) => {
+                        // We're only interested in folders.
+                        // Thus we pop the file and retrieve the parent instead.
+                        file.path.pop();
+                        payload.deleted.insert(file.path);
+                    }
+                    Path::Folder(folder) => {
+                        payload.deleted.insert(folder.path);
+                    }
                 }
-            },
+            }
         }
     }
 
@@ -104,12 +178,25 @@ pub(crate) fn create_payload(changed_paths: Vec<ChangedPath>) -> Payload {
 }
 
 impl Autoscan {
+    pub(crate) async fn available(&self) -> Result<(), AutoscanError> {
+        let mut url = self.url.clone();
+        url.set_path("/health");
+
+        self.client
+            .get(url)
+            .svc_send(&self)
+            .await?
+            .error_for_status()?;
+
+        Ok(())
+    }
+
     #[tracing::instrument(skip(self, payload))]
     pub(crate) async fn send_payload(
         &self,
         drive_id: &str,
         payload: &Payload,
-    ) -> crate::Result<()> {
+    ) -> Result<(), AutoscanError> {
         let mut url = self.url.clone();
         url.set_path(&format!("/triggers/a-train/{}", drive_id));
 
@@ -118,13 +205,7 @@ impl Autoscan {
             request = request.basic_auth(&auth.username, Some(&auth.password));
         }
 
-        request
-            .send()
-            .await
-            .context(crate::AutoscanUnavailable)?
-            .error_for_status()
-            .context(crate::AutoscanUnavailable)?;
-
+        request.svc_send(&self).await?.error_for_status()?;
         debug!("changes received by autoscan");
 
         Ok(())
@@ -150,22 +231,19 @@ mod tests {
         }
     }
 
-    fn new_inner(path: &str) -> InnerPath {
+    fn new_inner(path: &str, trashed: bool) -> InnerPath {
         InnerPath {
             // drive_id and id are not used, so whatever
             drive_id: "test".to_string(),
             id: "test".to_string(),
             path: path.into(),
+            trashed,
         }
     }
 
     impl Autoscan {
         fn new_test(url: &str) -> Self {
-            Self {
-                auth: None,
-                client: Client::new(),
-                url: Url::parse(&url).unwrap(),
-            }
+            Autoscan::new(None, Client::new(), Url::parse(url).unwrap())
         }
     }
 
@@ -175,8 +253,8 @@ mod tests {
         let autoscan = Autoscan::new_test(&server.uri());
 
         let payload: Payload = create_payload(vec![
-            new_path(true, true, new_inner("/this/is/a/full/path")),
-            new_path(false, true, new_inner("/just/like/me")),
+            new_path(true, true, new_inner("/this/is/a/full/path", false)),
+            new_path(false, true, new_inner("/just/like/me", false)),
         ]);
 
         let expected_body = json!({
@@ -209,8 +287,8 @@ mod tests {
     #[test]
     fn payload_folders_are_full_paths() {
         let payload: Payload = create_payload(vec![
-            new_path(true, true, new_inner("/this/is/a/full/path")),
-            new_path(false, true, new_inner("/just/like/me")),
+            new_path(true, true, new_inner("/this/is/a/full/path", false)),
+            new_path(false, true, new_inner("/just/like/me", false)),
         ]);
 
         let expected_body = json!({
@@ -232,8 +310,8 @@ mod tests {
     #[test]
     fn payload_files_are_parents() {
         let payload: Payload = create_payload(vec![
-            new_path(true, false, new_inner("/keep me/but not me")),
-            new_path(false, false, new_inner("/where/is/perry")),
+            new_path(true, false, new_inner("/keep me/but not me", false)),
+            new_path(false, false, new_inner("/where/is/perry", false)),
         ]);
 
         let expected_body = json!({
@@ -243,6 +321,26 @@ mod tests {
             "deleted": [
                 "/where/is"
             ],
+        });
+
+        assert_eq!(
+            payload,
+            from_value(expected_body).expect("could not deserialize")
+        )
+    }
+
+    /// Check whether file paths are transformed into the path of the parent.
+    #[test]
+    fn trashed_deleted_is_skipped() {
+        let payload: Payload = create_payload(vec![new_path(
+            false,
+            false,
+            new_inner("/trashed/and/now/deleted", true),
+        )]);
+
+        let expected_body = json!({
+            "created": [],
+            "deleted": [],
         });
 
         assert_eq!(

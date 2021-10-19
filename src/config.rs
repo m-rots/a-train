@@ -1,9 +1,15 @@
 use crate::autoscan::Credentials;
-use crate::{InvalidConfiguration, InvalidServiceAccount, ReadConfiguration, Result};
 use bernard::Account;
+use eyre::WrapErr;
 use serde::Deserialize;
-use snafu::ResultExt;
 use std::path::{Path, PathBuf};
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum ConfigError {
+    #[error(transparent)]
+    UnexpectedError(#[from] eyre::Report),
+}
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -25,17 +31,20 @@ pub(crate) struct DriveConfig {
 }
 
 impl Config {
-    pub fn new<T: AsRef<Path>>(path: T) -> Result<Self> {
+    pub fn new<T: AsRef<Path>>(path: T) -> Result<Self, ConfigError> {
         let path = path.as_ref();
 
-        let config = std::fs::read_to_string(path).context(ReadConfiguration { path })?;
-        let config: Config = toml::from_str(&config).context(InvalidConfiguration { path })?;
+        let config = std::fs::read_to_string(path)
+            .wrap_err_with(|| format!("Could not read config file at: {:?}", path))?;
+
+        let config: Config = toml::from_str(&config).wrap_err("Configuration file is invalid")?;
 
         Ok(config)
     }
 
-    pub fn account(&self) -> Result<Account> {
-        let account = Account::from_file(&self.drive.account).context(InvalidServiceAccount)?;
+    pub fn account(&self) -> Result<Account, ConfigError> {
+        let account = Account::from_file(&self.drive.account)
+            .wrap_err_with(|| format!("Service Account is invalid: {:?}", self.drive.account))?;
 
         Ok(account)
     }

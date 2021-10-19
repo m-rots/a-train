@@ -36,7 +36,7 @@ impl Atrain {
         // also fetch changes here and create+send response to Autoscan for each individual Drive.
         // https://stackoverflow.com/questions/51044467
         stream::iter(&self.drives)
-            .map(|drive_id| self.sync_drive(&drive_id))
+            .map(|drive_id| self.sync_drive(drive_id))
             .buffer_unordered(CONCURRENCY)
             .try_collect()
             .await

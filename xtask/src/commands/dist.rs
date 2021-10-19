@@ -1,12 +1,12 @@
 use crate::commands::{dist_path, source_path, Section, XtaskCommand};
 use anyhow::Context;
-use clap::Clap;
+use clap::Parser;
 use flate2::{write::GzEncoder, Compression};
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 use xshell::cmd;
 
-#[derive(Clap)]
+#[derive(Parser)]
 pub(crate) struct Dist {
     #[clap(long)]
     skip_build: bool,
@@ -33,10 +33,10 @@ impl XtaskCommand for Dist {
 
         for target in &self.targets {
             if !self.skip_build {
-                cross_build(&target)?;
+                cross_build(target)?;
             }
 
-            package(&target)?;
+            package(target)?;
         }
 
         Ok(())
@@ -63,14 +63,14 @@ fn cross_build(target: &str) -> xshell::Result<()> {
 fn package(target: &str) -> anyhow::Result<()> {
     let _s = Section::new(format!("Package: {}", target));
 
-    let src = source_path(&target);
+    let src = source_path(target);
 
     // Ignore the error strip provides on cross-compiled binaries.
     // Should probably wait for Rust to provide stripping of its own
     // without requiring nightly.
     strip(&src).ok();
 
-    let dst = destination_path(&target);
+    let dst = destination_path(target);
     gzip(&src, &dst)?;
 
     Ok(())
