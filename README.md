@@ -1,3 +1,6 @@
+[Autoscan](https://github.com/Cloudbox/autoscan), A-Train and [Bernard](https://github.com/m-rots/bernard-rs) are no longer actively maintained. All projects are considered feature frozen and when compatibility with Google Drive, Plex, Emby, Jellyfin and the -arrs inevitably breaks, no fixes will be provided and such an event will officially mark these projects as end of life.
+As all three projects have permissible open source licenses, feel free to start a fork and continue development. Ownership of these repositories as well as the Docker images will not be transferred.
+
 # A-Train
 
 A-Train is the official Autoscan trigger that listens for changes within Google Drive.
